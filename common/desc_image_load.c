@@ -60,6 +60,7 @@ int get_bl_params_node_index(unsigned int image_id)
 			return (int)index;
 	}
 
+	
 	return -1;
 }
 
