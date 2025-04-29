@@ -45,6 +45,12 @@ typedef struct rmmd_rmm_context {
 uint64_t rmmd_rmm_sync_entry(rmmd_rmm_context_t *ctx);
 __dead2 void rmmd_rmm_sync_exit(uint64_t rc);
 
+
+/* DEST: Functions to save realm info */
+uint64_t rmmd_smc_save_values(cpu_context_t *ctx, uint64_t x0, 
+					uint64_t x1, uint64_t x2, uint64_t x3,
+					uint64_t x4, void *handle);
+
 /* Functions implementing attestation utilities for RMM */
 int rmmd_attest_get_platform_token(uint64_t buf_pa, uint64_t *buf_size,
 				   uint64_t c_size,

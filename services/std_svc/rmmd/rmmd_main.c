@@ -299,14 +299,28 @@ static uint64_t	rmmd_smc_forward(uint32_t src_sec_state,
 	 * used in return path.
 	 */
 	if (src_sec_state == NON_SECURE) {
-		SMC_RET8(ctx, x0, x1, x2, x3, x4,
-			 SMC_GET_GP(handle, CTX_GPREG_X5),
-			 SMC_GET_GP(handle, CTX_GPREG_X6),
-			 SMC_GET_GP(handle, CTX_GPREG_X7));
+		rmmd_smc_save_values(ctx, x0, x1, x2, x3, x4, handle);
 	}
 
 	SMC_RET5(ctx, x0, x1, x2, x3, x4);
 }
+
+uint64_t rmmd_smc_save_values(cpu_context_t *ctx, 
+	uint64_t x0, uint64_t x1, uint64_t x2, uint64_t x3,
+	uint64_t x4, void *handle) 
+{
+	if (x0 == 0xc4000158) {
+		INFO("RMI_REALM_CREATE called, FID value = 0x%lx\n", x0);
+		INFO("x2 param = 0x%lx\n", x2);
+		// if it is the case change this to have specifically the SK
+	} 
+	// Call the corresponding function in the RMM
+	SMC_RET8(ctx, x0, x1, x2, x3, x4,
+		SMC_GET_GP(handle, CTX_GPREG_X5),
+		SMC_GET_GP(handle, CTX_GPREG_X6),
+		SMC_GET_GP(handle, CTX_GPREG_X7));
+}
+
 
 /*******************************************************************************
  * This function handles all SMCs in the range reserved for RMI. Each call is
