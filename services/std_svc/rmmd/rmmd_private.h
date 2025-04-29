@@ -29,6 +29,27 @@
 #define RMMD_C_RT_CTX_SIZE		0x60
 #define RMMD_C_RT_CTX_ENTRIES		(RMMD_C_RT_CTX_SIZE >> DWORD_SHIFT)
 
+/*******************************************************************************
+ * DEST: Constant assumption on max number of values per Realm.
+ ******************************************************************************/
+#define MAX_REALM_NUMS      10   // Max number of realms active at one time
+#define MAX_DATA_GRANULES   32   // Expected max number of data granules
+#define MAX_RECS            4    // Expected REC count per Realm
+#define MAX_RTT_PAGES       128  // Expected max number of RTT pages
+
+/*******************************************************************************
+ * DEST: Function fid of the calls RMM.
+ ******************************************************************************/
+#define RMI_REALM_CREATE_FID  0xc4000158
+#define RMI_RTT_CREATE_FID    0xc400015D
+#define RMI_DATA_CREATE_FID   0xc4000153
+#define RMI_REC_CREATE_FID    0xc400015A
+
+#define RMI_REC_DESTROY_FID   0xc400015B
+#define RMI_DATA_DESTROY_FID  0xc4000155
+#define RMI_RTT_DESTROY_FID   0xc400015E
+#define RMI_REALM_DESTROY_FID 0xc4000159
+
 #ifndef __ASSEMBLER__
 #include <stdint.h>
 
@@ -40,6 +61,21 @@ typedef struct rmmd_rmm_context {
 	uint64_t c_rt_ctx;
 	cpu_context_t cpu_ctx;
 } rmmd_rmm_context_t;
+
+/*
+ * DEST: Data stcture that contains info on the realm addr space mapping.
+ * There can be at most MAX_REALM_NUMS ammount of realm_info_t.
+ */
+typedef struct realm_info {
+    uint64_t rd; 			// Realm Descriptor
+    uint64_t rtt_base;
+	uint64_t rtt_addrs[MAX_RTT_PAGES];
+    uint32_t num_rtt;
+	uint64_t data_addrs[MAX_DATA_GRANULES];  // Allocated data granules
+	uint32_t num_data;
+    uint64_t rec_addrs[MAX_RECS];            // REC addresses used during runtime
+    uint32_t num_recs;
+} realm_info_t;
 
 /* Functions used to enter/exit the RMM synchronously */
 uint64_t rmmd_rmm_sync_entry(rmmd_rmm_context_t *ctx);
