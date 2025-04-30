@@ -60,7 +60,8 @@ static int32_t rmm_init(void);
 /*******************************************************************************
  * DEST: Define list to contain realm variables.
  ******************************************************************************/
-// static realm_info_t rd_val[MAX_REALM_NUMS];
+static realm_info_t realm_values[MAX_REALM_NUMS];
+static uint32_t realm_count = 0;
 
 /*******************************************************************************
  * This function takes an RMM context pointer and performs a synchronous entry
@@ -311,30 +312,66 @@ static uint64_t	rmmd_smc_forward(uint32_t src_sec_state,
 }
 
 
+/*******************************************************************************
+ * DEST: Save values in the realm values.
+ *******************************************************************************/
+ static realm_info_t *get_realm_info_by_rd(uint64_t rd)
+{
+    for (uint32_t i = 0; i < realm_count; i++) {
+        if (realm_values[i].rd == rd) {
+            return &realm_values[i];
+        }
+    }
+    return NULL;
+}
+
 uint64_t rmmd_smc_save_values(cpu_context_t *ctx, 
 	uint64_t x0, uint64_t x1, uint64_t x2, uint64_t x3,
 	uint64_t x4, void *handle) 
 {
 	if (x0 == RMI_REALM_CREATE_FID) {
 		INFO("RMI_REALM_CREATE called\n");
-		//INFO("x1 rd = 0x%lx\n", x1);
-		// TODO: get specifically param.rtt_base
-		// if it is the case change this to have specifically the SK
+		INFO("x1 rd = 0x%lx\n", x1);
+		if (realm_count >= MAX_REALM_NUMS) {
+			ERROR("Too many realms!\n");
+		} else {
+			realm_values[realm_count].rd = x1;
+			realm_values[realm_count].num_rtt = 0;
+			realm_values[realm_count].num_data = 0;
+			realm_values[realm_count].num_recs = 0;
+			realm_count++;
+			INFO("ADDED! Realm count: %d\n", realm_count);
+		}
 	} else if (x0 == RMI_RTT_CREATE_FID) {
 		INFO("RMI_RTT_CREATE called\n");
-		// INFO("x1 rd = 0x%lx\n", x1);
-		// INFO("x2 param (rtt) = 0x%lx\n", x2);
-		// INFO("x3 param (ipa) = 0x%lx\n", x3);
-		// INFO("x4 param (lvl) = %ld\n", x4);
+		INFO("x1 rd = 0x%lx\n", x1);
+		INFO("x2 param (rtt) = 0x%lx\n", x2);
+		INFO("x3 param (ipa) = 0x%lx\n", x3);
+		INFO("x4 param (lvl) = %ld\n", x4);
+		realm_info_t *realm = get_realm_info_by_rd(x1);
+		if (realm && realm->num_rtt < MAX_RTT_PAGES) {
+			realm->rtt_addrs[realm->num_rtt++] = x2;
+			INFO("ADDED! Realm RTT count: %d\n", realm->num_rtt);
+		}
 	} else if (x0 == RMI_DATA_CREATE_FID) {
 		INFO("RMI_DATA_CREATE called\n");
 		INFO("x1 rd = 0x%lx\n", x1);
 		INFO("x2 param (data) = 0x%lx\n", x2);
 		INFO("x3 param (ipa) = 0x%lx\n", x3);
+		realm_info_t *realm = get_realm_info_by_rd(x1);
+		if (realm && realm->num_data < MAX_DATA_GRANULES) {
+			realm->data_addrs[realm->num_data++] = x2;
+			INFO("ADDED! Realm DATA count: %d\n", realm->num_data);
+		}
 	} else if (x0 == RMI_REC_CREATE_FID) {
 		INFO("RMI_REC_CREATE called\n");
-		// INFO("x1 rd = 0x%lx\n", x1);
-		// INFO("x2 param (rec) = 0x%lx\n", x2);
+		INFO("x1 rd = 0x%lx\n", x1);
+		INFO("x2 param (rec) = 0x%lx\n", x2);
+		realm_info_t *realm = get_realm_info_by_rd(x1);
+		if (realm && realm->num_recs < MAX_RECS) {
+			realm->rec_addrs[realm->num_recs++] = x2;
+			INFO("ADDED! Realm REC count: %d\n", realm->num_recs);
+		}
 	}
 
 	// Call the corresponding function in the RMM

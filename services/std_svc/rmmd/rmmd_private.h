@@ -32,7 +32,7 @@
 /*******************************************************************************
  * DEST: Constant assumption on max number of values per Realm.
  ******************************************************************************/
-#define MAX_REALM_NUMS      10   // Max number of realms active at one time
+#define MAX_REALM_NUMS      4    // Max number of realms active at one time
 #define MAX_DATA_GRANULES   32   // Expected max number of data granules
 #define MAX_RECS            4    // Expected REC count per Realm
 #define MAX_RTT_PAGES       128  // Expected max number of RTT pages
