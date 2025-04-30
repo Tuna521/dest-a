@@ -41,13 +41,13 @@
  * DEST: Function fid of the calls RMM.
  ******************************************************************************/
 #define RMI_REALM_CREATE_FID  0xc4000158
-#define RMI_RTT_CREATE_FID    0xc400015D
+#define RMI_RTT_CREATE_FID    0xc400015d
 #define RMI_DATA_CREATE_FID   0xc4000153
-#define RMI_REC_CREATE_FID    0xc400015A
+#define RMI_REC_CREATE_FID    0xc400015a
 
-#define RMI_REC_DESTROY_FID   0xc400015B
+#define RMI_REC_DESTROY_FID   0xc400015b
 #define RMI_DATA_DESTROY_FID  0xc4000155
-#define RMI_RTT_DESTROY_FID   0xc400015E
+#define RMI_RTT_DESTROY_FID   0xc400015e
 #define RMI_REALM_DESTROY_FID 0xc4000159
 
 #ifndef __ASSEMBLER__
@@ -65,10 +65,14 @@ typedef struct rmmd_rmm_context {
 /*
  * DEST: Data stcture that contains info on the realm addr space mapping.
  * There can be at most MAX_REALM_NUMS ammount of realm_info_t.
+ * Define Variables per realm. Each realm contain the following values:
+ * rd_addr (defines which realm),
+ * rtt_lvl_addrs[] (list of other rtt on other levels),
+ * data_lvl_addrs[] (list of all data granules allocated),
+ * rec_addr[] (list of recs used for in the run)
  */
 typedef struct realm_info {
     uint64_t rd; 			// Realm Descriptor
-    uint64_t rtt_base;
 	uint64_t rtt_addrs[MAX_RTT_PAGES];
     uint32_t num_rtt;
 	uint64_t data_addrs[MAX_DATA_GRANULES];  // Allocated data granules

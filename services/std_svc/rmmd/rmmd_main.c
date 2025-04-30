@@ -58,6 +58,11 @@ static entry_point_info_t *rmm_ep_info;
 static int32_t rmm_init(void);
 
 /*******************************************************************************
+ * DEST: Define list to contain realm variables.
+ ******************************************************************************/
+// static realm_info_t rd_val[MAX_REALM_NUMS];
+
+/*******************************************************************************
  * This function takes an RMM context pointer and performs a synchronous entry
  * into it.
  ******************************************************************************/
@@ -305,15 +310,33 @@ static uint64_t	rmmd_smc_forward(uint32_t src_sec_state,
 	SMC_RET5(ctx, x0, x1, x2, x3, x4);
 }
 
+
 uint64_t rmmd_smc_save_values(cpu_context_t *ctx, 
 	uint64_t x0, uint64_t x1, uint64_t x2, uint64_t x3,
 	uint64_t x4, void *handle) 
 {
-	if (x0 == 0xc4000158) {
-		INFO("RMI_REALM_CREATE called, FID value = 0x%lx\n", x0);
-		INFO("x2 param = 0x%lx\n", x2);
+	if (x0 == RMI_REALM_CREATE_FID) {
+		INFO("RMI_REALM_CREATE called\n");
+		//INFO("x1 rd = 0x%lx\n", x1);
+		// TODO: get specifically param.rtt_base
 		// if it is the case change this to have specifically the SK
-	} 
+	} else if (x0 == RMI_RTT_CREATE_FID) {
+		INFO("RMI_RTT_CREATE called\n");
+		// INFO("x1 rd = 0x%lx\n", x1);
+		// INFO("x2 param (rtt) = 0x%lx\n", x2);
+		// INFO("x3 param (ipa) = 0x%lx\n", x3);
+		// INFO("x4 param (lvl) = %ld\n", x4);
+	} else if (x0 == RMI_DATA_CREATE_FID) {
+		INFO("RMI_DATA_CREATE called\n");
+		INFO("x1 rd = 0x%lx\n", x1);
+		INFO("x2 param (data) = 0x%lx\n", x2);
+		INFO("x3 param (ipa) = 0x%lx\n", x3);
+	} else if (x0 == RMI_REC_CREATE_FID) {
+		INFO("RMI_REC_CREATE called\n");
+		// INFO("x1 rd = 0x%lx\n", x1);
+		// INFO("x2 param (rec) = 0x%lx\n", x2);
+	}
+
 	// Call the corresponding function in the RMM
 	SMC_RET8(ctx, x0, x1, x2, x3, x4,
 		SMC_GET_GP(handle, CTX_GPREG_X5),
