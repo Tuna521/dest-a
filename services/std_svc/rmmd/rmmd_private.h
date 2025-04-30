@@ -71,13 +71,24 @@ typedef struct rmmd_rmm_context {
  * data_lvl_addrs[] (list of all data granules allocated),
  * rec_addr[] (list of recs used for in the run)
  */
+typedef struct rtt_info {
+	uint64_t rtt_addr;
+	uint64_t ipa;
+	uint64_t lvl;
+} rtt_info_t;
+
+typedef struct data_info {
+	uint64_t data_addr;
+	uint64_t ipa;
+} data_info_t;
+
 typedef struct realm_info {
     uint64_t rd; 			// Realm Descriptor
-	uint64_t rtt_addrs[MAX_RTT_PAGES];
+	rtt_info_t rtt_info[MAX_RTT_PAGES];
     uint32_t num_rtt;
-	uint64_t data_addrs[MAX_DATA_GRANULES];  // Allocated data granules
+	data_info_t data_addrs[MAX_DATA_GRANULES];  // Allocated data granules
 	uint32_t num_data;
-    uint64_t rec_addrs[MAX_RECS];            // REC addresses used during runtime
+    uint64_t rec_addrs[MAX_RECS];               // REC addresses used during runtime
     uint32_t num_recs;
 } realm_info_t;
 
