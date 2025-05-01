@@ -313,7 +313,7 @@ static uint64_t	rmmd_smc_forward(uint32_t src_sec_state,
 
 
 /*******************************************************************************
- * DEST: Save values in the realm values.
+ * DEST: Save values in the realm.
  *******************************************************************************/
  static realm_info_t *get_realm_info_by_rd(uint64_t rd)
 {
@@ -392,6 +392,74 @@ uint64_t rmmd_smc_save_values(cpu_context_t *ctx,
 		SMC_GET_GP(handle, CTX_GPREG_X7));
 }
 
+/*******************************************************************************
+ * DEST: Delete values in the realm.
+ *******************************************************************************/
+static uint64_t call_rmm(uint64_t fid, uint64_t x1, uint64_t x2,
+	uint64_t x3, uint64_t x4)
+{
+	cpu_context_t *ctx = cm_get_context(REALM);
+
+	/* Set x0–x4 for RMM */
+	write_ctx_reg(get_gpregs_ctx(ctx), CTX_GPREG_X0, fid);
+	write_ctx_reg(get_gpregs_ctx(ctx), CTX_GPREG_X1, x1);
+	write_ctx_reg(get_gpregs_ctx(ctx), CTX_GPREG_X2, x2);
+	write_ctx_reg(get_gpregs_ctx(ctx), CTX_GPREG_X3, x3);
+	write_ctx_reg(get_gpregs_ctx(ctx), CTX_GPREG_X4, x4);
+
+	// Our current context is SECURE, so we need to switch to REALM
+	cm_el2_sysregs_context_save(SECURE);
+	cm_el2_sysregs_context_restore(REALM);
+	cm_set_next_eret_context(REALM);
+
+	// Switch control to the RMM
+	SMC_RET5(ctx, fid, x1, x2, x3, x4);
+}
+
+__attribute__((__unused__)) static void destroy_realm_in_rmm(uint64_t rd)
+{
+	// The following function does not account for undelegation
+	realm_info_t *r = get_realm_info_by_rd(rd);
+	if (!r) {
+		INFO("destroy_realm_in_rmm: realm 0x%lx not found\n", rd);
+		// panic();
+	} else {
+		INFO("Destroying realm 0x%lx...\n", rd);
+		// Destroy all RECs
+		for (uint32_t i = 0; i < r->num_recs; i++) {
+			if (r->rec_addrs[i]) {
+				INFO("Destroying REC Granules... \n");
+				uint64_t rec_addr = r->rec_addrs[i];
+				call_rmm(RMI_REC_DESTROY_FID, rec_addr, 0, 0, 0);
+			}
+		}
+		// Destroy all data granules
+		for (int i = r->num_data - 1; i >= 0; i--) {
+			if (r->data_addrs[i].data_addr != 0) {
+				// data_addrs[i].data_addr is a physical address of it
+				// this is used in undelegate, which isnt looked into here
+				INFO("Destroying DATA Granules... \n");
+				uint64_t ipa = r->data_addrs[i].ipa;
+				call_rmm(RMI_DATA_DESTROY_FID, rd, ipa, 0, 0);
+			}
+		}
+		// Destroy all RTTs
+		for (int i = r->num_rtt - 1; i >= 0; i--) {
+			if (r->rtt_info[i].rtt_addr != 0) {
+				// rtt_info[i].rtt_addr is a physical address of it
+				// this is used in undelegate, which isnt looked into here
+				INFO("Destroying RTT Granules... \n");
+				uint64_t ipa = r->rtt_info[i].ipa;
+				uint64_t level = r->rtt_info[i].lvl;
+				call_rmm(RMI_RTT_DESTROY_FID, rd, ipa, level, 0);
+			}
+		}
+
+		// Destroy realm itself
+		INFO("Destroying RD Granule...");
+		call_rmm(RMI_REALM_DESTROY_FID, rd, 0, 0, 0);
+	}
+}
 
 /*******************************************************************************
  * This function handles all SMCs in the range reserved for RMI. Each call is
