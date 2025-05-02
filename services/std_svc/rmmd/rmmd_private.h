@@ -40,15 +40,16 @@
 /*******************************************************************************
  * DEST: Function fid of the calls RMM.
  ******************************************************************************/
-#define RMI_REALM_CREATE_FID  0xc4000158
-#define RMI_RTT_CREATE_FID    0xc400015d
-#define RMI_DATA_CREATE_FID   0xc4000153
-#define RMI_REC_CREATE_FID    0xc400015a
+#define RMI_REALM_CREATE_FID   0xc4000158
+#define RMI_RTT_CREATE_FID     0xc400015d
+#define RMI_DATA_CREATE_FID    0xc4000153
+#define RMI_REC_CREATE_FID     0xc400015a
+#define RMI_REALM_ACTIVATE_FID 0xc4000157
 
-#define RMI_REC_DESTROY_FID   0xc400015b
-#define RMI_DATA_DESTROY_FID  0xc4000155
-#define RMI_RTT_DESTROY_FID   0xc400015e
-#define RMI_REALM_DESTROY_FID 0xc4000159
+#define RMI_REC_DESTROY_FID    0xc400015b
+#define RMI_DATA_DESTROY_FID   0xc4000155
+#define RMI_RTT_DESTROY_FID    0xc400015e
+#define RMI_REALM_DESTROY_FID  0xc4000159
 
 #ifndef __ASSEMBLER__
 #include <stdint.h>

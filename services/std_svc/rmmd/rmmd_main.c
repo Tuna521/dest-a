@@ -63,6 +63,8 @@ static int32_t rmm_init(void);
 static realm_info_t realm_values[MAX_REALM_NUMS];
 static uint32_t realm_count = 0;
 
+static void destroy_realm_in_rmm(uint64_t rd);
+
 /*******************************************************************************
  * This function takes an RMM context pointer and performs a synchronous entry
  * into it.
@@ -384,12 +386,17 @@ uint64_t rmmd_smc_save_values(cpu_context_t *ctx,
 		}
 		print_realm_info(r);
 	}
-
+	
+	// if (x0 == RMI_REALM_ACTIVATE_FID) {
+	// 	INFO("RMI_REALM_ACTIVATE called\n");
+	// 	destroy_realm_in_rmm(x1);
+	// 	return RMI_SUCCESS;
+	// } else {
 	// Call the corresponding function in the RMM
 	SMC_RET8(ctx, x0, x1, x2, x3, x4,
-		SMC_GET_GP(handle, CTX_GPREG_X5),
-		SMC_GET_GP(handle, CTX_GPREG_X6),
-		SMC_GET_GP(handle, CTX_GPREG_X7));
+	SMC_GET_GP(handle, CTX_GPREG_X5),
+	SMC_GET_GP(handle, CTX_GPREG_X6),
+	SMC_GET_GP(handle, CTX_GPREG_X7));
 }
 
 /*******************************************************************************
@@ -416,7 +423,12 @@ static uint64_t call_rmm(uint64_t fid, uint64_t x1, uint64_t x2,
 	SMC_RET5(ctx, fid, x1, x2, x3, x4);
 }
 
-__attribute__((__unused__)) static void destroy_realm_in_rmm(uint64_t rd)
+static void destroy_realm_in_rmm(uint64_t rd)
+/** Destroy a realm in the RMM.
+ *
+ * This function destroys all resources associated with a realm in the RMM.
+ * It does not account for undelegation. This function is not used currently.
+ */
 {
 	// The following function does not account for undelegation
 	realm_info_t *r = get_realm_info_by_rd(rd);
@@ -503,6 +515,7 @@ uint64_t rmmd_rmi_handler(uint32_t smc_fid, uint64_t x1, uint64_t x2,
 		return rmmd_smc_forward(NON_SECURE, REALM, smc_fid,
 					x1, x2, x3, x4, handle);
 	}
+	// here maybe we should forward to RMM froms ecure statee
 
 	if (src_sec_state != SMC_FROM_REALM) {
 		SMC_RET1(handle, SMC_UNK);
