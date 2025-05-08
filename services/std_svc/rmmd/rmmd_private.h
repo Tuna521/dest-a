@@ -51,6 +51,9 @@
 #define RMI_RTT_DESTROY_FID    0xc400015e
 #define RMI_REALM_DESTROY_FID  0xc4000159
 
+// DEST: TODO: Change this to something
+#define RMI_REALM_WIPE_FID    0xdeadbeef
+
 #ifndef __ASSEMBLER__
 #include <stdint.h>
 
@@ -83,6 +86,17 @@ typedef struct data_info {
 	uint64_t ipa;
 } data_info_t;
 
+/* DEST: metadata to track at which point of destruction we are at.
+*/
+typedef enum {
+    REALM_DESTROY_INIT,
+    REALM_DESTROY_RECS,
+    REALM_DESTROY_DATA,
+    REALM_DESTROY_RTT,
+    REALM_DESTROY_RD,
+    REALM_DESTROY_DONE
+} realm_destroy_stage_t;
+
 typedef struct realm_info {
     uint64_t rd; 			// Realm Descriptor
 	rtt_info_t rtt_info[MAX_RTT_PAGES];
@@ -91,6 +105,8 @@ typedef struct realm_info {
 	uint32_t num_data;
     uint64_t rec_addrs[MAX_RECS];               // REC addresses used during runtime
     uint32_t num_recs;
+	realm_destroy_stage_t destroy_stage;
+    uint32_t destroy_index;  // index into recs/data/rtts arrays
 } realm_info_t;
 
 /* Functions used to enter/exit the RMM synchronously */

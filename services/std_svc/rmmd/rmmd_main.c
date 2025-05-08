@@ -63,6 +63,7 @@ static int32_t rmm_init(void);
 static realm_info_t realm_values[MAX_REALM_NUMS];
 static uint32_t realm_count = 0;
 
+// DEST: TODO: remove if other works.
 static void destroy_realm_in_rmm(uint64_t rd);
 
 /*******************************************************************************
@@ -358,6 +359,8 @@ uint64_t rmmd_smc_save_values(cpu_context_t *ctx,
 			r->num_rtt = 0;
 			r->num_data = 0;
 			r->num_recs = 0;
+			// Set for the destroy to start (TODO: maybe put it before realm activate?)
+			r->destroy_stage = REALM_DESTROY_INIT;
 		}
 	} else if (x0 == RMI_RTT_CREATE_FID) {
 		INFO("RMI_RTT_CREATE called\n");
@@ -387,12 +390,22 @@ uint64_t rmmd_smc_save_values(cpu_context_t *ctx,
 		print_realm_info(r);
 	}
 	
-	// if (x0 == RMI_REALM_ACTIVATE_FID) {
-	// 	INFO("RMI_REALM_ACTIVATE called\n");
-	// 	destroy_realm_in_rmm(x1);
-	// 	return RMI_SUCCESS;
-	// } else {
-	// Call the corresponding function in the RMM
+	// DEST: Handle the logic of destruction
+	// at the end, if keep on getting the custom SMC call to wipe info, 
+	// keep on calling destory realm step until it returns true
+	// else, schedule another call of this custom SMC call. 
+	// if (x0 == RMI_REALM_WIPE_FID) {
+	// 	INFO("RMI_REALM_WIPE requested\n");
+	
+	// 	// calls SMC_RET anyways here, so will stop anyways??
+	// 	bool complete = destroy_realm_step(x1);  // where x1 = RD
+	// 	// the bool return wouldnt really work, as this is an smc call
+	// 	if (complete) {
+	// 		INFO("Realm destruction complete.\n");
+	// 		// Cleanup metadata
+	// 	} 
+	// }
+
 	SMC_RET8(ctx, x0, x1, x2, x3, x4,
 	SMC_GET_GP(handle, CTX_GPREG_X5),
 	SMC_GET_GP(handle, CTX_GPREG_X6),
@@ -423,7 +436,62 @@ static uint64_t call_rmm(uint64_t fid, uint64_t x1, uint64_t x2,
 	SMC_RET5(ctx, fid, x1, x2, x3, x4);
 }
 
-static void destroy_realm_in_rmm(uint64_t rd)
+/* Returns true if the destruction is done or rd was not found 
+   false if there are still steps left in destruction*/
+__attribute__((unused)) bool destroy_realm_step(uint64_t rd) {
+    realm_info_t *r = get_realm_info_by_rd(rd);
+    if (!r) return true; // Realm not found
+
+    switch (r->destroy_stage) {
+    case REALM_DESTROY_INIT:
+        r->destroy_index = 0;
+        r->destroy_stage = REALM_DESTROY_RECS;
+        // Fall through to next stage
+		/* fallthrough */
+    case REALM_DESTROY_RECS:
+		// Recs go from 0 to num_recs, while other go from last init to first
+        if (r->destroy_index < r->num_recs) {
+            call_rmm(RMI_REC_DESTROY_FID, r->rec_addrs[r->destroy_index++], 0, 0, 0);
+            return false;
+        }
+        r->destroy_index = r->num_data;
+        r->destroy_stage = REALM_DESTROY_DATA;
+        break;
+    case REALM_DESTROY_DATA:
+        if (r->destroy_index > 0) {
+            r->destroy_index--;
+            uint64_t ipa = r->data_addrs[r->destroy_index].ipa;
+            call_rmm(RMI_DATA_DESTROY_FID, rd, ipa, 0, 0);
+            return false;
+        }
+        r->destroy_index = r->num_rtt;
+        r->destroy_stage = REALM_DESTROY_RTT;
+        break;
+    case REALM_DESTROY_RTT:
+        if (r->destroy_index > 0) {
+            r->destroy_index--;
+            uint64_t ipa = r->rtt_info[r->destroy_index].ipa;
+            uint64_t lvl = r->rtt_info[r->destroy_index].lvl;
+            call_rmm(RMI_RTT_DESTROY_FID, rd, ipa, lvl, 0);
+            return false;
+        }
+        r->destroy_stage = REALM_DESTROY_RD;
+        break;
+    case REALM_DESTROY_RD:
+        call_rmm(RMI_REALM_DESTROY_FID, rd, 0, 0, 0);
+        r->destroy_stage = REALM_DESTROY_DONE;
+        return false;
+    case REALM_DESTROY_DONE:
+		// TODO: somehow wipe away the info in the list
+		// like destroy realm info (rd)??
+        return true;
+    }
+
+    return false; // Shouldnt fall trhough this case
+}
+
+// DEST: TODO: Delete the following if above func works.
+__attribute__((unused)) static void destroy_realm_in_rmm(uint64_t rd)
 /** Destroy a realm in the RMM.
  *
  * This function destroys all resources associated with a realm in the RMM.
