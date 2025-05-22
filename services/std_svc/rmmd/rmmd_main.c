@@ -342,6 +342,20 @@ static void print_realm_info(const realm_info_t *r) {
     }
 }
 
+/*******************************************************************************
+ * DEST: Functions to read/write rpv value at offset 0x400 (rpv value of realm_param_ptr)
+ *******************************************************************************/
+// static void write_rpv_value(uint64_t param_ptr, uint64_t value) {
+//     uint64_t *rpv_ptr = (uint64_t *)((uintptr_t)param_ptr + 0x400);
+// 	memcpy(rpv_ptr, &value, sizeof(value));
+//     // *rpv_ptr = value;
+// }
+
+// static uint64_t read_rpv_value(uint64_t param_ptr) {
+//     uint64_t *rpv_ptr = (uint64_t *)((uintptr_t)param_ptr + 0x400);
+//     return *rpv_ptr;
+// }
+
 uint64_t rmmd_smc_save_values(cpu_context_t *ctx, 
 	uint64_t x0, uint64_t x1, uint64_t x2, uint64_t x3,
 	uint64_t x4, void *handle) 
@@ -349,6 +363,11 @@ uint64_t rmmd_smc_save_values(cpu_context_t *ctx,
 	if (x0 == RMI_REALM_CREATE_FID) {
 		INFO("RMI_REALM_CREATE called\n");
 		INFO("x1 rd = 0x%lx\n", x1);
+
+		// /* Write rpv value using the new function */
+		// write_rpv_value(x2, 10);  /* Set to 10 */
+		// uint64_t rpv_value = read_rpv_value(x2);
+		// INFO("rpv_value = 0x%lx\n", rpv_value);
 
 		if (realm_count >= MAX_REALM_NUMS) {
 			ERROR("Too many realms!\n");
@@ -385,14 +404,16 @@ uint64_t rmmd_smc_save_values(cpu_context_t *ctx,
 			r->rec_addrs[r->num_recs++] = x2;
 		}
 		print_realm_info(r);
-	} else if (x0 == RMI_REALM_ACTIVATE_FID) {
-		INFO("RMI_REALM_ACTIVATE called\n");
-		rmmd_timer_init(x1);
+	} else if (x0 == RMI_DATA_DESTROY_ALL_FID) {
+		INFO("RMI_DATA_DESTROY_ALL called\n");
+		INFO("x1 = 0x%lx\n", x1);
 	}
+	
+	/* This will now be called with either the original function ID or our changed one */
 	SMC_RET8(ctx, x0, x1, x2, x3, x4,
-	SMC_GET_GP(handle, CTX_GPREG_X5),
-	SMC_GET_GP(handle, CTX_GPREG_X6),
-	SMC_GET_GP(handle, CTX_GPREG_X7));
+		SMC_GET_GP(handle, CTX_GPREG_X5),
+		SMC_GET_GP(handle, CTX_GPREG_X6),
+		SMC_GET_GP(handle, CTX_GPREG_X7));
 }
 
 /*******************************************************************************
@@ -507,6 +528,13 @@ uint64_t rmmd_rmi_handler(uint32_t smc_fid, uint64_t x1, uint64_t x2,
 			smc_fid |= (FUNCID_SVE_HINT_MASK <<
 				    FUNCID_SVE_HINT_SHIFT);
 		}
+		if (smc_fid == RMI_REALM_ACTIVATE_FID) {
+			INFO("RMI_REALM_ACTIVATE called\n");
+			rmmd_timer_init(x1);
+
+			// INFO("RMI_REALM_ACTIVATE called, changed to RMI_DATA_DESTROY_ALL\n");
+			//return rmmd_rmi_handler(RMI_DATA_DESTROY_ALL_FID, x1, 0, 0, 0, NULL, ctx_handle, SMC_FROM_NON_SECURE);
+		} 
 
 		VERBOSE("RMMD: RMI call from non-secure world.\n");
 		return rmmd_smc_forward(NON_SECURE, REALM, smc_fid,
