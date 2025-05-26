@@ -208,9 +208,14 @@ int32_t register_interrupt_type_handler(uint32_t type,
 
 	/* Save the handler */
 	intr_type_descs[type].handler = handler;
-
 	return 0;
 }
+
+// int32_t force_register_interrupt_type_handler(uint32_t type, 
+// 					      interrupt_type_handler_t handler,
+// 					      uint32_t flags) {
+
+// 						  }
 
 /*******************************************************************************
  * This function is called when an interrupt is generated and returns the

@@ -55,6 +55,8 @@
 #ifndef __ASSEMBLER__
 #include <stdint.h>
 
+#define EL3_TIMER_IRQ               ARM_IRQ_SEC_PHY_TIMER
+
 /*
  * Data structure used by the RMM dispatcher (RMMD) in EL3 to track context of
  * the RMM at R-EL2.
@@ -114,6 +116,9 @@ uint64_t rmmd_el3_token_sign(void *handle, uint64_t x1, uint64_t x2,
 
 /* Timer functions for realm destruction */
 void rmmd_timer_init(uint64_t rd);
+
+uint64_t rmmd_timer_handler(uint32_t id, uint32_t flags,
+	void *handle, void *cookie);
 
 /* Assembly helpers */
 uint64_t rmmd_rmm_enter(uint64_t *c_rt_ctx);

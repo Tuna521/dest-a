@@ -36,6 +36,8 @@
 #include "rmmd_initial_context.h"
 #include "rmmd_private.h"
 
+#include <bl31/interrupt_mgmt.h>
+
 /*******************************************************************************
  * RMM boot failure flag
  ******************************************************************************/
@@ -168,6 +170,8 @@ static void manage_extensions_realm_per_world(void)
 /*******************************************************************************
  * Jump to the RMM for the first time.
  ******************************************************************************/
+static void el3_timer_irq_init(void);
+
 static int32_t rmm_init(void)
 {
 	long rc;
@@ -177,28 +181,59 @@ static int32_t rmm_init(void)
 
 	/* Enable architecture extensions */
 	manage_extensions_realm(&ctx->cpu_ctx);
-
 	manage_extensions_realm_per_world();
 
-	/* Initialize RMM EL2 context. */
+	/* Initialize RMM EL2 context */
 	rmm_el2_context_init(&ctx->cpu_ctx.el2_sysregs_ctx);
+
+	INFO("Set up the enable\n");
+	el3_timer_irq_init();
 
 	rc = rmmd_rmm_sync_entry(ctx);
 	if (rc != E_RMM_BOOT_SUCCESS) {
 		ERROR("RMM init failed: %ld\n", rc);
-		/* Mark the boot as failed for all the CPUs */
 		rmm_boot_failed = true;
 		return 0;
 	}
 
 	INFO("RMM init end.\n");
-
 	return 1;
 }
+
+static void el3_timer_irq_init(void)
+{
+	INFO("INIT: Registering EL3 timer interrupt handler\n");
+
+    plat_ic_set_interrupt_type(EL3_TIMER_IRQ, INTR_TYPE_EL3);
+	plat_ic_set_interrupt_priority(EL3_TIMER_IRQ, GIC_HIGHEST_SEC_PRIORITY);
+    plat_ic_enable_interrupt(EL3_TIMER_IRQ);
+}
+
+
+
+// static uint64_t rmmd_el3_timer_handler(uint32_t id,
+//                                        uint32_t flags,
+//                                        void *handle,
+//                                        void *cookie)
+// {
+// 	INFO("Inside EL3 timer interrupt handler\n");
+
+// 	uint32_t irq = plat_ic_acknowledge_interrupt();
+// 	INFO("irq = %d\n", irq);
+
+// 	write_cntps_ctl_el1(0); // Disable timer
+
+// 	// For now, just log. Later you can re-enable logic for realm destruction.
+
+// 	plat_ic_end_of_interrupt(irq);
+// 	return 0;
+// }
 
 /*******************************************************************************
  * Load and read RMM manifest, setup RMM.
  ******************************************************************************/
+static void el3_timer_irq_setup(void);
+
 int rmmd_setup(void)
 {
 	size_t shared_buf_size __unused;
@@ -274,11 +309,25 @@ int rmmd_setup(void)
 	cm_setup_context(&rmm_ctx->cpu_ctx, rmm_ep_info);
 
 	INFO("RMM setup done.\n");
+	el3_timer_irq_setup();
 
 	/* Register init function for deferred init.  */
 	bl31_register_rmm_init(&rmm_init);
 
 	return 0;
+}
+
+static void el3_timer_irq_setup(void) {
+	INFO("SETUP: Registering EL3 timer interrupt handler\n");
+	uint64_t flags = 0;
+    set_interrupt_rm_flag(flags, SECURE);
+    set_interrupt_rm_flag(flags, NON_SECURE);
+
+    int rc = register_interrupt_type_handler(INTR_TYPE_S_EL1, rmmd_timer_handler, flags);
+    if (rc == -EALREADY) {
+        ERROR("Failed to register EL3 timer handler: %d\n", rc);
+    }
+	INFO("SETUP: rc = %d\n", rc);
 }
 
 /*******************************************************************************
@@ -499,7 +548,7 @@ uint64_t rmmd_rmi_handler(uint32_t smc_fid, uint64_t x1, uint64_t x2,
 			  void *handle, uint64_t flags)
 {
 	uint32_t src_sec_state;
-
+	
 	/* If RMM failed to boot, treat any RMI SMC as unknown */
 	if (rmm_boot_failed) {
 		WARN("RMMD: Failed to boot up RMM. Ignoring RMI call\n");
@@ -531,7 +580,6 @@ uint64_t rmmd_rmi_handler(uint32_t smc_fid, uint64_t x1, uint64_t x2,
 		if (smc_fid == RMI_REALM_ACTIVATE_FID) {
 			INFO("RMI_REALM_ACTIVATE called\n");
 			rmmd_timer_init(x1);
-
 			// INFO("RMI_REALM_ACTIVATE called, changed to RMI_DATA_DESTROY_ALL\n");
 			//return rmmd_rmi_handler(RMI_DATA_DESTROY_ALL_FID, x1, 0, 0, 0, NULL, ctx_handle, SMC_FROM_NON_SECURE);
 		} 

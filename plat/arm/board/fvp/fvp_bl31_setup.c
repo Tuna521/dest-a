@@ -102,7 +102,7 @@ void __init bl31_plat_arch_setup(void)
 	size_t mapped_size_align __unused;
 
 	arm_bl31_plat_arch_setup();
-
+	
 	/*
 	 * For RESET_TO_BL31 systems, BL31 is the first bootloader to run.
 	 * So there is no BL2 to load the HW_CONFIG dtb into memory before

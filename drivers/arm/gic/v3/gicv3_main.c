@@ -302,6 +302,11 @@ void gicv3_cpuif_enable(unsigned int proc_num)
 
 	scr_el3 = read_scr_el3();
 
+	/* Route IRQ to EL3 */
+	write_scr_el3(read_scr_el3() | SCR_IRQ_BIT);
+	isb();
+	enable_irq();
+	
 	/*
 	 * Switch to NS state to write Non secure ICC_SRE_EL1 and
 	 * ICC_SRE_EL2 registers.
