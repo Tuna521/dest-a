@@ -9,6 +9,30 @@
 
 #include <lib/utils_def.h>
 
+// #include <ucontext.h>
+// #include <stdio.h>
+// include <signal.h>
+
+/*****************************************************************************
+ * Tracing code for Fast Model
+ *****************************************************************************/
+#define STR(s) #s
+#define CCA_MARKER(marker) __asm__ volatile("MOV XZR, " STR(marker))
+
+// Tracing halt and resume using specific opcodes (if supported by architecture)
+#define CCA_TRACE_START __asm__ volatile("HLT 0x1337");
+#define CCA_TRACE_STOP __asm__ volatile("HLT 0x1337");
+
+// Realm setup markers
+#define CCA_MARKER_TIMER_SETUP_START() CCA_MARKER(0x3500);
+#define CCA_MARKER_TIMER_SETUP_END() CCA_MARKER(0x3501);
+
+#define CCA_MARKER_TIMER_INIT_START() CCA_MARKER(0x3600);
+#define CCA_MARKER_TIMER_INIT_END() CCA_MARKER(0x3601);
+
+#define CCA_MARKER_TIMER_HANDLER_START() CCA_MARKER(0x3700);
+#define CCA_MARKER_TIMER_HANDLER_END() CCA_MARKER(0x3701);
+
 /*
  * The log output macros print output to the console. These macros produce
  * compiled log output only if the LOG_LEVEL defined in the makefile (or the

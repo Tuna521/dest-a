@@ -1,5 +1,6 @@
 {
     "files.associations": {
-        "tsp_private.h": "c"
+        "tsp_private.h": "c",
+        "debug.h": "c"
     }
 }

@@ -37,6 +37,9 @@
 #define MAX_RECS            4    // Expected REC count per Realm
 #define MAX_RTT_PAGES       128  // Expected max number of RTT pages
 
+#define RPV_OFFSET 0x400
+#define RPV_SIZE 64
+
 /*******************************************************************************
  * DEST: Function fid of the calls RMM.
  ******************************************************************************/
@@ -46,6 +49,7 @@
 #define RMI_REC_CREATE_FID       0xc400015a
 #define RMI_REALM_ACTIVATE_FID   0xc4000157
 #define RMI_DATA_DESTROY_ALL_FID 0xc400016a
+#define RMI_RPV_GET_FID          0xc400016b
 
 #define RMI_REC_DESTROY_FID    0xc400015b
 #define RMI_DATA_DESTROY_FID   0xc4000155
@@ -71,29 +75,12 @@ typedef struct rmmd_rmm_context {
  * There can be at most MAX_REALM_NUMS ammount of realm_info_t.
  * Define Variables per realm. Each realm contain the following values:
  * rd_addr (defines which realm),
- * rtt_lvl_addrs[] (list of other rtt on other levels),
- * data_lvl_addrs[] (list of all data granules allocated),
- * rec_addr[] (list of recs used for in the run)
+ * and timer expiration
  */
-typedef struct rtt_info {
-	uint64_t rtt_addr;
-	uint64_t ipa;
-	uint64_t lvl;
-} rtt_info_t;
-
-typedef struct data_info {
-	uint64_t data_addr;
-	uint64_t ipa;
-} data_info_t;
 
 typedef struct realm_info {
     uint64_t rd; 			// Realm Descriptor
-	rtt_info_t rtt_info[MAX_RTT_PAGES];
-    uint32_t num_rtt;
-	data_info_t data_addrs[MAX_DATA_GRANULES];  // Allocated data granules
-	uint32_t num_data;
-    uint64_t rec_addrs[MAX_RECS];               // REC addresses used during runtime
-    uint32_t num_recs;
+    uint32_t timer_expiration;
 } realm_info_t;
 
 /* Functions used to enter/exit the RMM synchronously */
@@ -115,7 +102,9 @@ uint64_t rmmd_el3_token_sign(void *handle, uint64_t x1, uint64_t x2,
 				    uint64_t x3, uint64_t x4);
 
 /* Timer functions for realm destruction */
-void rmmd_timer_init(uint64_t rd);
+void rmmd_timer_set_expiration(uint64_t rpv_timer_expiration);
+void rmmd_timer_init(uint64_t rd, bool create);
+void setting_timer(uint64_t timer_expiration);
 
 uint64_t rmmd_timer_handler(uint32_t id, uint32_t flags,
 	void *handle, void *cookie);

@@ -16,10 +16,13 @@
 /* Timer configuration */
 // how long after the realm is created that timer will be triggered
 #define REALM_DESTROY_TIMER_SECONDS 1
+#define REALM_RPV_GET_TIMER_SECONDS 5
 
 /* Timer state */
 static bool timer_triggered = false;
 static uint64_t realm_descriptor = 0;
+static bool realm_created = false;
+static uint64_t timer_expiration = 0;
 
 /*******************************************************************************
  * Timer interrupt handler that will trigger realm destruction
@@ -29,34 +32,77 @@ uint64_t rmmd_timer_handler(uint32_t id,
                                  void *handle,
                                  void *cookie)
 {
-    uint32_t irq = plat_ic_acknowledge_interrupt();
-
-    /* Acknowledge the interrupt */
-    INFO("Inside timer interrupt handler\n");
     uint64_t rc = 0;
-    timer_triggered = true;
-    
-    assert(get_cntp_ctl_istatus(read_cntps_ctl_el1()));
 
-    assert(irq == EL3_TIMER_IRQ);
+    if (realm_created) {
+        uint32_t irq = plat_ic_acknowledge_interrupt();
 
-    /* Call the specified SMC with the realm descriptor */
-    if (realm_descriptor != 0) {
-        write_cntps_ctl_el1(0);
-        INFO("Timer triggered\n");
+        /* Acknowledge the interrupt */
+        INFO("Inside timer interrupt handler\n");
         
-        /* Get the RMM context */
-        void *ctx_handle = cm_get_context(NON_SECURE);
-        assert(ctx_handle != NULL);
+        timer_triggered = true;
+        realm_created = false;
 
-        rc = rmmd_rmi_handler(RMI_DATA_DESTROY_ALL_FID, 
-                realm_descriptor, 0, 0, 0, 
-                NULL, ctx_handle, SMC_FROM_NON_SECURE);
+        assert(get_cntp_ctl_istatus(read_cntps_ctl_el1()));
+
+        assert(irq == EL3_TIMER_IRQ);
+        
+        /* Call the specified SMC with the realm descriptor */
+        if (realm_descriptor != 0) {
+            write_cntps_ctl_el1(0);
+            INFO("Timer triggered\n");
+            
+            /* Get the RMM context */
+            void *ctx_handle = cm_get_context(NON_SECURE);
+            assert(ctx_handle != NULL);
+
+            rc = rmmd_rmi_handler(RMI_RPV_GET_FID, 
+                    realm_descriptor, 0, 0, 0, 
+                    NULL, ctx_handle, SMC_FROM_NON_SECURE);
+        } else {
+            INFO("No realm descriptor\n");
+        }
+        // ??? 
+        plat_ic_end_of_interrupt(irq);
+
     } else {
-        INFO("No realm descriptor\n");
+        INFO("In EL3 timer!\n");
+        CCA_TRACE_START;
+        CCA_MARKER_TIMER_HANDLER_START();
+        CCA_TRACE_STOP;
+
+        uint32_t irq = plat_ic_acknowledge_interrupt();
+
+        /* Acknowledge the interrupt */
+        INFO("Inside timer interrupt handler\n");
+        timer_triggered = true;
+        
+        assert(get_cntp_ctl_istatus(read_cntps_ctl_el1()));
+
+        assert(irq == EL3_TIMER_IRQ);
+
+        /* Call the specified SMC with the realm descriptor */
+        if (realm_descriptor != 0) {
+            write_cntps_ctl_el1(0);
+            INFO("Timer triggered\n");
+            
+            /* Get the RMM context */
+            void *ctx_handle = cm_get_context(NON_SECURE);
+            assert(ctx_handle != NULL);
+
+            rc = rmmd_rmi_handler(RMI_DATA_DESTROY_ALL_FID, 
+                    realm_descriptor, 0, 0, 0, 
+                    NULL, ctx_handle, SMC_FROM_NON_SECURE);
+        } else {
+            INFO("No realm descriptor\n");
+        }
+        // ??? 
+        plat_ic_end_of_interrupt(irq);
+        
+        CCA_TRACE_START;
+        CCA_MARKER_TIMER_HANDLER_END();
+        CCA_TRACE_STOP;
     }
-    // ??? 
-    plat_ic_end_of_interrupt(irq);
 
     /* If no realm descriptor, just return to the caller */
     return rc;
@@ -67,34 +113,61 @@ uint64_t rmmd_timer_handler(uint32_t id,
 /*******************************************************************************
  * Initialize the timer for realm destruction
  ******************************************************************************/
-void rmmd_timer_init(uint64_t rd)
-{
-    realm_descriptor = rd;
 
+void rmmd_timer_set_expiration(uint64_t rpv_timer_expiration) {
+    INFO("HERE in set expiration!");
+    if (rpv_timer_expiration == 0) {
+        timer_expiration = REALM_DESTROY_TIMER_SECONDS;
+    } else {
+        timer_expiration = rpv_timer_expiration;
+    }
+}
+
+
+void setting_timer(uint64_t time_to_set) {
     assert(read_scr_el3() & SCR_FIQ_BIT);
     assert(read_scr_el3() & SCR_IRQ_BIT);
 
     uint64_t freq = read_cntfrq_el0();
     INFO("time now = %lu\n", read_cntpct_el0());
-    uint64_t expire = read_cntpct_el0() + (REALM_DESTROY_TIMER_SECONDS * freq / 100);
+    uint64_t expire = read_cntpct_el0() + (time_to_set * freq / 100);
     INFO("time expire = %lu\n", expire);
     write_cntps_cval_el1(expire);
-    // isb();
-    
+
     uint32_t ctl = CNTP_CTL_ENABLE_BIT;  // Enable
-    // uint32_t ctl = 0;
     ctl &= ~CNTP_CTL_IMASK_BIT;         // Unmask
     write_cntps_ctl_el1(ctl);
-    // isb();
-    // write_cntps_ctl_el1(CNTP_CTL_ENABLE_BIT);  // Enable timer, unmasked
 
     assert(read_cntps_ctl_el1() > read_cntpct_el0());
 
     assert(read_cntps_ctl_el1() & CNTP_CTL_ENABLE_BIT);
     assert((read_cntps_ctl_el1() & CNTP_CTL_IMASK_BIT) == 0);
+}
 
-    INFO("EL3 timer armed: will fire in %d sec for realm 0x%lx\n",
-         REALM_DESTROY_TIMER_SECONDS, rd);
+void rmmd_timer_init(uint64_t rd, bool create)
+{
+    if (create) {
+        realm_descriptor = rd;
+        realm_created = true;
+        // Set timer off in 5 second
+        setting_timer(REALM_RPV_GET_TIMER_SECONDS);
+
+        INFO("EL3 timer armed: will fire in %d sec for realm 0x%lx\n", REALM_RPV_GET_TIMER_SECONDS, rd);
+    } else {
+        INFO("SETUP: Set EL3 timer interrupt at time\n");
+        CCA_TRACE_START;
+        CCA_MARKER_TIMER_INIT_START();
+        CCA_TRACE_STOP;
+        
+        realm_created = false;
+        setting_timer(timer_expiration);
+
+        INFO("EL3 timer armed: will fire in %lu sec for realm 0x%lx\n", timer_expiration, rd);
+   
+       CCA_TRACE_START;
+       CCA_MARKER_TIMER_INIT_END();
+       CCA_TRACE_STOP;
+    }
 
     // INFO("Initializing timer for realm 0x%lx\n", rd);
 

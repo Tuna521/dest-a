@@ -64,8 +64,10 @@ static int32_t rmm_init(void);
  ******************************************************************************/
 static realm_info_t realm_values[MAX_REALM_NUMS];
 static uint32_t realm_count = 0;
-
-static void destroy_realm_in_rmm(uint64_t rd) __attribute__((unused));
+static bool realm_created = false;
+static uint64_t realm_created_id = 0;
+static bool realm_getting_rpv = false;
+static uint64_t realm_getting_rpv_id = 0;
 
 /*******************************************************************************
  * This function takes an RMM context pointer and performs a synchronous entry
@@ -203,31 +205,18 @@ static int32_t rmm_init(void)
 static void el3_timer_irq_init(void)
 {
 	INFO("INIT: Registering EL3 timer interrupt handler\n");
+	// CCA_TRACE_START;
+	// CCA_MARKER_TIMER_SETUP_START();
+	// CCA_TRACE_STOP;
 
     plat_ic_set_interrupt_type(EL3_TIMER_IRQ, INTR_TYPE_EL3);
 	plat_ic_set_interrupt_priority(EL3_TIMER_IRQ, GIC_HIGHEST_SEC_PRIORITY);
     plat_ic_enable_interrupt(EL3_TIMER_IRQ);
+
+	// CCA_TRACE_START;
+	// CCA_MARKER_TIMER_SETUP_END();
+	// CCA_TRACE_STOP;
 }
-
-
-
-// static uint64_t rmmd_el3_timer_handler(uint32_t id,
-//                                        uint32_t flags,
-//                                        void *handle,
-//                                        void *cookie)
-// {
-// 	INFO("Inside EL3 timer interrupt handler\n");
-
-// 	uint32_t irq = plat_ic_acknowledge_interrupt();
-// 	INFO("irq = %d\n", irq);
-
-// 	write_cntps_ctl_el1(0); // Disable timer
-
-// 	// For now, just log. Later you can re-enable logic for realm destruction.
-
-// 	plat_ic_end_of_interrupt(irq);
-// 	return 0;
-// }
 
 /*******************************************************************************
  * Load and read RMM manifest, setup RMM.
@@ -319,6 +308,10 @@ int rmmd_setup(void)
 
 static void el3_timer_irq_setup(void) {
 	INFO("SETUP: Registering EL3 timer interrupt handler\n");
+	// CCA_TRACE_START;
+	// CCA_MARKER_TIMER_SETUP_START();
+	// CCA_TRACE_STOP;
+
 	uint64_t flags = 0;
     set_interrupt_rm_flag(flags, SECURE);
     set_interrupt_rm_flag(flags, NON_SECURE);
@@ -328,6 +321,10 @@ static void el3_timer_irq_setup(void) {
         ERROR("Failed to register EL3 timer handler: %d\n", rc);
     }
 	INFO("SETUP: rc = %d\n", rc);
+	
+	// CCA_TRACE_START;
+	// CCA_MARKER_TIMER_SETUP_END();
+	// CCA_TRACE_STOP;
 }
 
 /*******************************************************************************
@@ -378,84 +375,17 @@ static uint64_t	rmmd_smc_forward(uint32_t src_sec_state,
 
 static void print_realm_info(const realm_info_t *r) {
     INFO("Realm rd = 0x%lx\n", r->rd);
-    for (uint32_t i = 0; i < r->num_rtt; i++) {
-        INFO("  RTT[%u] = addr: 0x%lx, ipa: 0x%lx, lvl: %lu\n",
-            i, r->rtt_info[i].rtt_addr, r->rtt_info[i].ipa, r->rtt_info[i].lvl);
-    }
-    for (uint32_t i = 0; i < r->num_data; i++) {
-        INFO("  DATA[%u] = addr: 0x%lx, ipa: 0x%lx\n",
-            i, r->data_addrs[i].data_addr, r->data_addrs[i].ipa);
-    }
-    for (uint32_t i = 0; i < r->num_recs; i++) {
-        INFO("  REC[%u] = addr: 0x%lx\n", i, r->rec_addrs[i]);
-    }
 }
-
-/*******************************************************************************
- * DEST: Functions to read/write rpv value at offset 0x400 (rpv value of realm_param_ptr)
- *******************************************************************************/
-// static void write_rpv_value(uint64_t param_ptr, uint64_t value) {
-//     uint64_t *rpv_ptr = (uint64_t *)((uintptr_t)param_ptr + 0x400);
-// 	memcpy(rpv_ptr, &value, sizeof(value));
-//     // *rpv_ptr = value;
-// }
-
-// static uint64_t read_rpv_value(uint64_t param_ptr) {
-//     uint64_t *rpv_ptr = (uint64_t *)((uintptr_t)param_ptr + 0x400);
-//     return *rpv_ptr;
-// }
 
 uint64_t rmmd_smc_save_values(cpu_context_t *ctx, 
 	uint64_t x0, uint64_t x1, uint64_t x2, uint64_t x3,
 	uint64_t x4, void *handle) 
 {
-	if (x0 == RMI_REALM_CREATE_FID) {
-		INFO("RMI_REALM_CREATE called\n");
-		INFO("x1 rd = 0x%lx\n", x1);
-
-		// /* Write rpv value using the new function */
-		// write_rpv_value(x2, 10);  /* Set to 10 */
-		// uint64_t rpv_value = read_rpv_value(x2);
-		// INFO("rpv_value = 0x%lx\n", rpv_value);
-
-		if (realm_count >= MAX_REALM_NUMS) {
-			ERROR("Too many realms!\n");
-		} else {
-			realm_info_t *r = &realm_values[realm_count++];
-			r->rd = x1;
-			r->num_rtt = 0;
-			r->num_data = 0;
-			r->num_recs = 0;
-		}
-	} else if (x0 == RMI_RTT_CREATE_FID) {
-		INFO("RMI_RTT_CREATE called\n");
-		realm_info_t *r = get_realm_info_by_rd(x1);
-		if (r && r->num_rtt < MAX_RTT_PAGES) {
-			rtt_info_t *ri = &r->rtt_info[r->num_rtt++];
-			ri->rtt_addr = x2;
-			ri->ipa = x3;
-			ri->lvl = x4;
-		}
-		print_realm_info(r);
-	} else if (x0 == RMI_DATA_CREATE_FID) {
-		INFO("RMI_DATA_CREATE called\n");
-		realm_info_t *r = get_realm_info_by_rd(x1);
-		if (r && r->num_data < MAX_DATA_GRANULES) {
-			data_info_t *di = &r->data_addrs[r->num_data++];
-			di->data_addr = x2;
-			di->ipa = x3;
-		}
-		print_realm_info(r);
-	} else if (x0 == RMI_REC_CREATE_FID) {
-		INFO("RMI_REC_CREATE called\n");
-		realm_info_t *r = get_realm_info_by_rd(x1);
-		if (r && r->num_recs < MAX_RECS) {
-			r->rec_addrs[r->num_recs++] = x2;
-		}
-		print_realm_info(r);
-	} else if (x0 == RMI_DATA_DESTROY_ALL_FID) {
+	if (x0 == RMI_DATA_DESTROY_ALL_FID) {
 		INFO("RMI_DATA_DESTROY_ALL called\n");
 		INFO("x1 = 0x%lx\n", x1);
+		realm_info_t *r = get_realm_info_by_rd(x1);
+		print_realm_info(r);
 	}
 	
 	/* This will now be called with either the original function ID or our changed one */
@@ -463,80 +393,6 @@ uint64_t rmmd_smc_save_values(cpu_context_t *ctx,
 		SMC_GET_GP(handle, CTX_GPREG_X5),
 		SMC_GET_GP(handle, CTX_GPREG_X6),
 		SMC_GET_GP(handle, CTX_GPREG_X7));
-}
-
-/*******************************************************************************
- * DEST: Delete values in the realm.
- *******************************************************************************/
-static uint64_t call_rmm(uint64_t fid, uint64_t x1, uint64_t x2,
-	uint64_t x3, uint64_t x4)
-{
-	cpu_context_t *ctx = cm_get_context(REALM);
-
-	/* Set x0–x4 for RMM */
-	write_ctx_reg(get_gpregs_ctx(ctx), CTX_GPREG_X0, fid);
-	write_ctx_reg(get_gpregs_ctx(ctx), CTX_GPREG_X1, x1);
-	write_ctx_reg(get_gpregs_ctx(ctx), CTX_GPREG_X2, x2);
-	write_ctx_reg(get_gpregs_ctx(ctx), CTX_GPREG_X3, x3);
-	write_ctx_reg(get_gpregs_ctx(ctx), CTX_GPREG_X4, x4);
-
-	// Our current context is SECURE, so we need to switch to REALM
-	cm_el2_sysregs_context_save(SECURE);
-	cm_el2_sysregs_context_restore(REALM);
-	cm_set_next_eret_context(REALM);
-
-	// Switch control to the RMM
-	SMC_RET5(ctx, fid, x1, x2, x3, x4);
-}
-
-static void destroy_realm_in_rmm(uint64_t rd)
-/** Destroy a realm in the RMM.
- *
- * This function destroys all resources associated with a realm in the RMM.
- * It does not account for undelegation. This function is not used currently.
- */
-{
-	// The following function does not account for undelegation
-	realm_info_t *r = get_realm_info_by_rd(rd);
-	if (!r) {
-		INFO("destroy_realm_in_rmm: realm 0x%lx not found\n", rd);
-		// panic();
-	} else {
-		INFO("Destroying realm 0x%lx...\n", rd);
-		// Destroy all RECs
-		for (uint32_t i = 0; i < r->num_recs; i++) {
-			if (r->rec_addrs[i]) {
-				INFO("Destroying REC Granules... \n");
-				uint64_t rec_addr = r->rec_addrs[i];
-				call_rmm(RMI_REC_DESTROY_FID, rec_addr, 0, 0, 0);
-			}
-		}
-		// Destroy all data granules
-		for (int i = r->num_data - 1; i >= 0; i--) {
-			if (r->data_addrs[i].data_addr != 0) {
-				// data_addrs[i].data_addr is a physical address of it
-				// this is used in undelegate, which isnt looked into here
-				INFO("Destroying DATA Granules... \n");
-				uint64_t ipa = r->data_addrs[i].ipa;
-				call_rmm(RMI_DATA_DESTROY_FID, rd, ipa, 0, 0);
-			}
-		}
-		// Destroy all RTTs
-		for (int i = r->num_rtt - 1; i >= 0; i--) {
-			if (r->rtt_info[i].rtt_addr != 0) {
-				// rtt_info[i].rtt_addr is a physical address of it
-				// this is used in undelegate, which isnt looked into here
-				INFO("Destroying RTT Granules... \n");
-				uint64_t ipa = r->rtt_info[i].ipa;
-				uint64_t level = r->rtt_info[i].lvl;
-				call_rmm(RMI_RTT_DESTROY_FID, rd, ipa, level, 0);
-			}
-		}
-
-		// Destroy realm itself
-		INFO("Destroying RD Granule...");
-		call_rmm(RMI_REALM_DESTROY_FID, rd, 0, 0, 0);
-	}
 }
 
 /*******************************************************************************
@@ -568,6 +424,29 @@ uint64_t rmmd_rmi_handler(uint32_t smc_fid, uint64_t x1, uint64_t x2,
 	 * Forward an RMI call from the Normal world to the Realm world as it
 	 * is.
 	 */
+
+	if (smc_fid == RMI_REALM_CREATE_FID) {
+		INFO("RMI_REALM_CREATE called in tf-a\n");
+
+		if (realm_count >= MAX_REALM_NUMS) {
+			ERROR("Too many realms!\n");
+		} else {
+			realm_info_t *r = &realm_values[realm_count++];
+			r->rd = x1;
+			r->timer_expiration = 0;
+			print_realm_info(r);
+			
+			realm_created_id = r->rd;
+			realm_created = true;
+		}
+	} else if (smc_fid == RMI_RPV_GET_FID) {
+		INFO("RMI_RPV_GET called in tf-a\n");
+		realm_getting_rpv = true;
+	} else if (smc_fid == RMI_REALM_ACTIVATE_FID) {
+		INFO("RMI_REALM_ACTIVATE called in tf-a\n");
+		rmmd_timer_init(x1, false);
+	} 
+
 	if (src_sec_state == SMC_FROM_NON_SECURE) {
 		/*
 		 * If SVE hint bit is set in the flags then update the SMC
@@ -577,13 +456,7 @@ uint64_t rmmd_rmi_handler(uint32_t smc_fid, uint64_t x1, uint64_t x2,
 			smc_fid |= (FUNCID_SVE_HINT_MASK <<
 				    FUNCID_SVE_HINT_SHIFT);
 		}
-		if (smc_fid == RMI_REALM_ACTIVATE_FID) {
-			INFO("RMI_REALM_ACTIVATE called\n");
-			rmmd_timer_init(x1);
-			// INFO("RMI_REALM_ACTIVATE called, changed to RMI_DATA_DESTROY_ALL\n");
-			//return rmmd_rmi_handler(RMI_DATA_DESTROY_ALL_FID, x1, 0, 0, 0, NULL, ctx_handle, SMC_FROM_NON_SECURE);
-		} 
-
+		
 		VERBOSE("RMMD: RMI call from non-secure world.\n");
 		return rmmd_smc_forward(NON_SECURE, REALM, smc_fid,
 					x1, x2, x3, x4, handle);
@@ -597,7 +470,23 @@ uint64_t rmmd_rmi_handler(uint32_t smc_fid, uint64_t x1, uint64_t x2,
 	switch (smc_fid) {
 	case RMM_RMI_REQ_COMPLETE: {
 		uint64_t x5 = SMC_GET_GP(handle, CTX_GPREG_X5);
+		if (realm_created) {
+			// after RMI_REALM_CREATE
+			realm_created = false;
+			realm_getting_rpv_id = realm_created_id;
+			// set timer to call RMI_RPV_GET
+			rmmd_timer_init(realm_created_id, true);
+			realm_created_id = 0;
 
+		} else if (realm_getting_rpv) {
+			// after RMI_RPV_GET
+			INFO("RMI_RPV_GET_COMPLETE called in tf-a\n");
+			INFO("Timer setting to %lu\n", x1);
+			// get_realm_info_by_rd(realm_created_id)->timer_expiration = x1;
+			rmmd_timer_set_expiration(x1);
+			realm_getting_rpv = false;
+		}
+	
 		return rmmd_smc_forward(REALM, NON_SECURE, x1,
 					x2, x3, x4, x5, handle);
 	}
